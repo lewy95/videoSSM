@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="cn.xzxy.lewy.mapper.VideoCommentMapper">
+
+    <resultMap id="VideoComInfo" type="VideoComment">
+        <id column="id" property="id"/>
+        <result column="content" property="content"/>
+        <result column="uid" property="uid"/>
+        <result column="vid" property="vid"/>
+        <result column="createDate" property="createDate"/>
+    </resultMap>
+
+    <resultMap id="UserVideoComInfo" type="VideoComment" extends="VideoComInfo">
+        <collection property="user" ofType="User">
+            <id column="id" property="id"/>
+            <result column="username" property="username"/>
+            <result column="password" property="password"/>
+            <result column="power" property="power"/>
+            <result column="email" property="email"/>
+        </collection>
+    </resultMap>
+
+    <!-- List<VideoComment> selectALLVideoComment(Interger id); -->
+    <select id="selectALLVideoCommentByVid" parameterType="java.lang.Integer"
+            resultMap="UserVideoComInfo">
+        SELECT u.username,vc.content,vc.vid,vc.createDate FROM
+        (SELECT id,username FROM user)u
+         LEFT JOIN
+        (SELECT id,content,uid,vid,createDate FROM comment)vc
+        ON u.id=vc.uid WHERE vc.vid = #{vid} ORDER BY vc.id DESC
+    </select>
+
+    <!-- void insertVComment(VideoComment videoComment); -->
+    <insert id="insertVComment" keyProperty="id"
+            parameterType="VideoComment" useGeneratedKeys="true">
+    INSERT INTO comment (content,uid,vid,createDate)
+    VALUES (#{content,jdbcType=VARCHAR},#{uid,jdbcType=INTEGER},#{vid,jdbcType=INTEGER},#{createDate})
+  </insert>
+
+</mapper>

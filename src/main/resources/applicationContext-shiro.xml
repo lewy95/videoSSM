@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+       http://www.springframework.org/schema/beans/spring-beans.xsd">
+
+    <!-- 1. 配置securityManager -->
+    <bean id="securityManager" class="org.apache.shiro.web.mgt.DefaultWebSecurityManager">
+        <property name="cacheManager" ref="cacheManager"/>
+        <!--<property name="rememberMeManager" ref="rememberMeManager"/>-->
+        <!-- 配置多realm认证策略：
+             默认的是AtLeastOneSuccessfulStrategy 只要有一个realm认证成功即可 返回成功的realm的认证信息
+                    AllSuccessfulStrategy 必须多个认证都通过才算成功 返回所有的realm的认证信息
+        -->
+        <property name="authenticator" ref="authenticator"/>
+        <!-- 以下是一个realm -->
+        <property name="realm" ref="MyRealm"/>
+        <!-- 以下是多个realm -->
+        <!--<property name="realms">-->
+            <!--<list>-->
+                <!--&lt;!&ndash; list中元素是有先后的，所以先进行第一个 &ndash;&gt;-->
+                <!--<ref bean="MyRealm"/>-->
+                <!--<ref bean="secondRealm"/>-->
+            <!--</list>-->
+        <!--</property>-->
+
+        <!-- 可以通过设置rememberMeManager来设置记住我的时间 -->
+        <!--<property name="rememberMeManager.cookie.maxage" value="10"/>-->
+    </bean>
+
+    <!-- 2. 配置cacheManager 需要加入ehcache配置文件 -->
+    <bean id="cacheManager" class="org.apache.shiro.cache.ehcache.EhCacheManager">
+        <property name="cacheManagerConfigFile" value="classpath:ehcache.xml"/>
+    </bean>
+
+    <!-- 配置多realm认证策略 -->
+    <bean id="authenticator" class="org.apache.shiro.authc.pam.ModularRealmAuthenticator">
+        <property name="authenticationStrategy">
+            <bean class="org.apache.shiro.authc.pam.AtLeastOneSuccessfulStrategy"/>
+        </property>
+        <!-- 修改策略，默认是AtLeastOneSuccessfulStrategy -->
+        <!--<property name="authenticationStrategy">-->
+            <!--<bean class="org.apache.shiro.authc.pam.AllSuccessfulStrategy"></bean>-->
+        <!--</property>-->
+    </bean>
+
+    <!-- 3. 配置realm 实现了Realm接口的bean -->
+    <!-- MD5 -->
+    <bean id="MyRealm" class="cn.xzxy.lewy.realm.ShiroRealm">
+        <!-- Realm的credentialsMatcher属性用于密码比对 -->
+        <property name="credentialsMatcher">
+            <!-- 把credentialsMatcher替换成HashedCredentialsMatcher对前台传来的密码进行加密 -->
+            <bean class="org.apache.shiro.authc.credential.HashedCredentialsMatcher">
+                <property name="hashAlgorithmName" value="MD5"/>
+                <property name="hashIterations" value="2"/>
+            </bean>
+        </property>
+    </bean>
+    <!-- SHA1 -->
+    <!--<bean id="secondRealm" class="cn.xzxy.yjt.realms.SecondRealm">-->
+        <!--&lt;!&ndash; Realm的credentialsMatcher属性用于密码比对 &ndash;&gt;-->
+        <!--<property name="credentialsMatcher">-->
+            <!--&lt;!&ndash; 把credentialsMatcher替换成HashedCredentialsMatcher对前台传来的密码进行加密 &ndash;&gt;-->
+            <!--<bean class="org.apache.shiro.authc.credential.HashedCredentialsMatcher">-->
+                <!--<property name="hashAlgorithmName" value="SHA1"/>-->
+                <!--<property name="hashIterations" value="2"/>-->
+            <!--</bean>-->
+        <!--</property>-->
+    <!--</bean>-->
+
+    <!-- 4. 配置lifecycleBeanPostProcessor 可以自定义的来调用配置IOC容器中shiro bean的生命周期方法 -->
+    <bean id="lifecycleBeanPostProcessor" class="org.apache.shiro.spring.LifecycleBeanPostProcessor"/>
+
+    <!-- 5. 启用IOC容器使用shiro的注解 必须在配置lifecycleBeanPostProcessor后才可以启用
+            下面两个bean都要配-->
+    <bean class="org.springframework.aop.framework.autoproxy.DefaultAdvisorAutoProxyCreator"
+          depends-on="lifecycleBeanPostProcessor"/>
+    <bean class="org.apache.shiro.spring.security.interceptor.AuthorizationAttributeSourceAdvisor">
+        <property name="securityManager" ref="securityManager"/>
+    </bean>
+
+    <!-- 6. 配置shiroFilter 注意：id必须和web.xml中的filterName一致-->
+    <bean id="shiroFilter" class="org.apache.shiro.spring.web.ShiroFilterFactoryBean">
+        <property name="securityManager" ref="securityManager"/>
+        <!-- 当访问需要认证后才能进入的网站时会自动跳转到loginUrl -->
+        <property name="loginUrl" value="/toLoginPage"/>
+        <property name="successUrl" value="/forehome"/>
+        <!-- 通过实例工厂配置哪些页面需要受保护，以及访问这些页面需要的权限 -->
+        <property name="filterChainDefinitionMap" ref="filterChainDefinitionMap"/>
+        <!-- 也可以手动配置，配置哪些页面需要受保护，以及访问这些页面需要的权限
+             anon 可以被匿名访问(即不需要登陆就可以访问)
+             authc 必须认证(即登陆)后才可以访问 /** = authc表示所有的都需要认证
+             logout 登出 避免有缓存是直接登陆
+             roles 角色管理器
+             user 用户拦截器 用户已经身份认证或者记住我登录都可以成功
+             几个注意点
+             1. 若改成/list.jsp = authc则list.jsp没法访问，但其他不被限定的允许被访问，如user.jsp
+             2. url权限采用第一次匹配优先的方式，即在/** = authc后再加一个/list.jsp = anon则list仍不能被访问
+                若/list.jsp = anon加在/** = authc前则可以被匿名访问
+        -->
+        <!--
+        <property name="filterChainDefinitions">
+            <value>
+                /login.jsp = anon
+                /shiro/login = anon
+                /shiro/logout = logout
+
+                /user.jsp = roles[user]
+                /admin.jsp = roles[admin]
+
+                /** = authc
+            </value>
+        </property>
+        -->
+    </bean>
+
+    <!-- 配置一个 bean, 该 bean 实际上是一个 Map. 通过实例工厂方法的方式 -->
+    <bean id="filterChainDefinitionMap" factory-bean="filterChainDefinitionMapBuilder"
+          factory-method="buildFilterChainDefinitionMap"/>
+    <bean id="filterChainDefinitionMapBuilder"
+          class="cn.xzxy.lewy.util.FilterChainDefinitionMapBuilder"/>
+
+    <!-- rememberMe管理器  -->
+    <!--<bean id="rememberMeManager" class="org.apache.shiro.web.mgt.CookieRememberMeManager">-->
+        <!--<property name="cipherKey"-->
+                  <!--value="#{T(org.apache.shiro.codec.Base64).decode('4AvVhmFLUs0KTA3Kprsdag==')}"/>-->
+        <!--<property name="cookie" ref="rememberMeCookie"/>-->
+    <!--</bean>-->
+    <!--<bean id="rememberMeCookie" class="org.apache.shiro.web.servlet.SimpleCookie">-->
+        <!--<constructor-arg value="rememberMe"/>-->
+        <!--<property name="httpOnly" value="true"/>-->
+        <!--<property name="maxAge" value="10000"/>-->
+    <!--</bean>-->
+	
+</beans>
